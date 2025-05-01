@@ -165,6 +165,12 @@ def upsert_into_supabase_polizei(data):
     print("Data upserted into Supabase 'polizei' table successfully.")
 
 
+def upsert_into_supabase_meeting(data):
+    for item in data:
+        supabase.table("meeting").upsert(item).execute()
+    print("Data upserted into Supabase 'meeting' table successfully.")
+
+
 def close_db(conn):
     conn.close()
     print("Database connection closed successfully.")

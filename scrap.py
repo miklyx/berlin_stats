@@ -47,14 +47,14 @@ def parse_meeting_html(html):
 
 
 if __name__ == "__main__": 
-    polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
+    #polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
     meeting_html= get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege')
     meetings = parse_meeting_html(meeting_html)
-    polizei = parse_polizei_html(polizei_html)
+    #polizei = parse_polizei_html(polizei_html)
+    #print(meetings)
     
-    
-    res = db.upsert_into_supabase_polizei(polizei)
-    print(res)
+    res = db.upsert_into_supabase_meeting(meetings)
+    #print(res)
     
     #polizei_record_html = get_html('https://www.berlin.de/polizei/polizeimeldungen/2025/pressemitteilung.1546705.php')
     #print(parse_polizei_html(polizei_html))

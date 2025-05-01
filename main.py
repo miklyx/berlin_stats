@@ -22,16 +22,18 @@ def create_app():
 async def update_db():
     polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
     meeting_html= get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege')
-    meetings = parse_meeting_html(meeting_html)
     polizei = parse_polizei_html(polizei_html)
     res = db.upsert_into_supabase_polizei(polizei)
-
+    meetings = parse_meeting_html(meeting_html)
+    resm = db.upsert_into_supabase_meeting(meetings)
+    
 
 app = create_app()
 
 @app.on_event("startup")
 async def startup_event():
-        await update_db() 
+        #await update_db() 
+        await update_db()
 
 @app.get("/")
 def read_root():
