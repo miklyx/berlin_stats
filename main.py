@@ -32,18 +32,35 @@ app = create_app()
 
 @app.on_event("startup")
 async def startup_event():
-        #await update_db() 
-        await update_db()
+    pass        
+    #await update_db()
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
 
 
-@app.get("/polizei")
-def get_polizei():
-    # This is where you would call your database function to get the data
-    # For example:
-    # data = db.get_polizei_data()
-    # return data
-    return {"message": "This is the polizei endpoint"}
+@app.get("/police_report_by_keyword/{keyword}")
+def get_polizei_by_keyword(keyword: str):
+    data = db.find_polizei_by_keyword_supabase(keyword)
+    if data:
+        return {"data": data}
+    else:
+        return {"message": "No data found."}
+    
+@app.get("/meeting_by_keyword/{keyword}")
+def get_meeting_by_keyword(keyword: str):
+    data = db.find_meeting_by_keyword_supabase(keyword)
+    if data:
+        return {"data": data}
+    else:
+        return {"message": "No data found."}
+
+    
+@app.get("/meeting_by_keyword_and_datum/{keyword}/{datum}")
+def get_meeting_by_keyword_and_datum(keyword: str, datum: str):
+    data = db.find_meeting_by_datum_and_keyword_supabase(datum, keyword)
+    if data:
+        return {"data": data}
+    else:
+        return {"message": "No data found."}

@@ -171,6 +171,35 @@ def upsert_into_supabase_meeting(data):
     print("Data upserted into Supabase 'meeting' table successfully.")
 
 
+def find_meeting_by_keyword_supabase(keyword):
+    data = supabase.table("meeting").select("*").ilike("Thema", f"%{keyword}%").execute()
+    if data.data:
+        print(f"Meeting found with keyword '{keyword}': {data.data}")
+        return data.data
+    else:
+        print(f"No meeting found with keyword '{keyword}'.")
+        
+        
+def find_polizei_by_keyword_supabase(keyword):
+    data = supabase.table("polizei").select("*").ilike("details", f"%{keyword}%").execute()
+    if data.data:
+        print(f"Polizei record found with keyword '{keyword}': {data.data}")
+        return data.data
+    else:
+        print(f"No polizei record found with keyword '{keyword}'.")
+
+
+def find_meeting_by_datum_and_keyword_supabase(datum, keyword):
+    data = supabase.table("meeting").select("*").ilike("Thema", f"%{keyword}%").eq("Datum", datum).execute()
+    if data.data:
+        print(f"Meeting found with keyword '{keyword}' and datum '{datum}': {data.data}")
+        return data.data
+    else:
+        print(f"No meeting found with keyword '{keyword}' and datum '{datum}'.")
+        
+        
+
+
 def close_db(conn):
     conn.close()
     print("Database connection closed successfully.")
