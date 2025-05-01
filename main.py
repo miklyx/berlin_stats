@@ -32,8 +32,8 @@ app = create_app()
 
 @app.on_event("startup")
 async def startup_event():
-    pass        
-    #await update_db()
+    #pass        
+    await update_db()
 
 @app.get("/")
 def read_root():
