@@ -32,22 +32,6 @@ def create_table_polizei(conn):
     return cursor
 
 
-def create_table_meeting(conn):
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS meeting (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            time TEXT,
-            district TEXT
-        )
-    """
-    )
-    conn.commit()
-    cursor.close()
-    print("Table 'meeting' created successfully.")
-    return cursor
 
 
 def insert_polizei_data(conn, data):
@@ -65,19 +49,7 @@ def insert_polizei_data(conn, data):
     print("Data inserted into 'polizei' table successfully.")
 
 
-def insert_meeting_data(conn, data):
-    cursor = conn.cursor()
-    for item in data:
-        cursor.execute(
-            """
-            INSERT INTO meeting (title, time, district)
-            VALUES (?, ?, ?)
-        """,
-            (item["title"], item["time"], item["district"]),
-        )
-    conn.commit()
-    cursor.close()
-    print("Data inserted into 'meeting' table successfully.")
+
 
 
 def fetch_polizei_data(conn):
@@ -190,36 +162,52 @@ def insert_only_new_polizei_data(data):
         return 0
     
 def insert_only_new_meeting_data(data):
-    existing_result = supabase.table("meeting").select("Von", "Datum", "Thema").execute()
+    # Fetch existing records from the database
+    existing_result = supabase.table("meeting").select("von", "datum", "thema").execute()
     
+    # Create a set of existing keys
     existing_keys = set()
     for record in existing_result.data:
-        key = f"{record.get('Von')}|{record.get('Datum')}|{record.get('Thema')}"
+        key = f"{record.get('von').strip()}|{record.get('datum').strip()}|{record.get('thema').strip()}"
         existing_keys.add(key)
-    
+        print(f"Existing key: {key}")  # Debugging output
+
+    # Filter new data
     new_data = []
     for item in data:
-        key = f"{item.get('Von')}|{item.get('Datum')}|{item.get('Thema')}"
+        key = f"{item.get('Von').strip()}|{item.get('Datum').strip()}|{item.get('Thema').strip()}"
+        print(f"Checking key: {key}")  # Debugging output
         if key not in existing_keys:
+            print(f"New key found: {key}")  # Debugging output
             new_data.append(item)
-    
-    #print(f"total: {len(data)}")
-    print(f"new: {len(new_data)}")
-    
-    if new_data:
+        else:
+            print(f"Key already exists: {key}")
+
+    # Print the number of new records
+    print(f"New records: {len(new_data)}")
+    def convert_keys_to_lowercase(item):
+        return {key.lower(): value for key, value in item.items()}
+
+    new_data_lowercase = [convert_keys_to_lowercase(item) for item in new_data]
+    # Insert new records into the database in batches
+    if new_data_lowercase:
+        batch_size = 100  # Adjust the batch size as needed
         success_count = 0
-        for item in new_data:
+
+        for i in range(0, len(new_data_lowercase), batch_size):
+            batch = new_data_lowercase[i:i + batch_size]
             try:
-                supabase.table("meeting").insert(item).execute()
-                success_count += 1
+                supabase.table("meeting").insert(batch).execute()
+                success_count += len(batch)
             except Exception as e:
-                print(f"error: {str(e)}")
-        
-        print(f"total inserted {success_count} new records")
+                print(f"Error inserting batch starting at index {i}: {str(e)}")
+
+        print(f"Total inserted {success_count} new records")
         return success_count
     else:
-        print("no new records")
+        print("No new records to insert")
         return 0
+
 
 
 def upsert_into_supabase_meeting(data):
@@ -229,7 +217,7 @@ def upsert_into_supabase_meeting(data):
 
 
 def find_meeting_by_keyword_supabase(keyword):
-    data = supabase.table("meeting").select("*").ilike("Thema", f"%{keyword}%").execute()
+    data = supabase.table("meeting").select("*").ilike("thema", f"%{keyword}%").execute()
     if data.data:
         print(f"Meeting found with keyword '{keyword}': {data.data}")
         return data.data
@@ -247,7 +235,7 @@ def find_polizei_by_keyword_supabase(keyword):
 
 
 def find_meeting_by_datum_and_keyword_supabase(datum, keyword):
-    data = supabase.table("meeting").select("*").ilike("Thema", f"%{keyword}%").eq("Datum", datum).execute()
+    data = supabase.table("meeting").select("*").ilike("thema", f"%{keyword}%").eq("datum", datum).execute()
     if data.data:
         print(f"Meeting found with keyword '{keyword}' and datum '{datum}': {data.data}")
         return data.data
