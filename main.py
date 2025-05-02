@@ -18,7 +18,7 @@ def create_app():
 
     return app
 
-@repeat_every(seconds=43200)  # Run twice a day
+@repeat_every(seconds=3600)  # Run twice a day
 async def update_db():
     polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
     meeting_html= get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege')
