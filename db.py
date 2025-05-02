@@ -163,6 +163,63 @@ def upsert_into_supabase_polizei(data):
     for item in data:
         supabase.table("polizei").upsert(item).execute()
     print("Data upserted into Supabase 'polizei' table successfully.")
+    
+def insert_only_new_polizei_data(data):
+ 
+    existing_result = supabase.table("polizei").select("time").execute()
+    existing_times = set(record.get('time') for record in existing_result.data)
+    
+    new_data = [item for item in data if item.get('time') not in existing_times]
+    
+    #print(f"total: {len(data)}")
+    print(f"new: {len(new_data)}")
+    
+    if new_data:
+        success_count = 0
+        for item in new_data:
+            try:
+                supabase.table("polizei").insert(item).execute()
+                success_count += 1
+            except Exception as e:
+                print(f"error: {str(e)}")
+        
+        print(f"total inserted {success_count} new records")
+        return success_count
+    else:
+        print("no new records")
+        return 0
+    
+def insert_only_new_meeting_data(data):
+    existing_result = supabase.table("meeting").select("Von", "Datum", "Thema").execute()
+    
+    existing_keys = set()
+    for record in existing_result.data:
+        key = f"{record.get('Von')}|{record.get('Datum')}|{record.get('Thema')}"
+        existing_keys.add(key)
+    
+    new_data = []
+    for item in data:
+        key = f"{item.get('Von')}|{item.get('Datum')}|{item.get('Thema')}"
+        if key not in existing_keys:
+            new_data.append(item)
+    
+    #print(f"total: {len(data)}")
+    print(f"new: {len(new_data)}")
+    
+    if new_data:
+        success_count = 0
+        for item in new_data:
+            try:
+                supabase.table("meeting").insert(item).execute()
+                success_count += 1
+            except Exception as e:
+                print(f"error: {str(e)}")
+        
+        print(f"total inserted {success_count} new records")
+        return success_count
+    else:
+        print("no new records")
+        return 0
 
 
 def upsert_into_supabase_meeting(data):

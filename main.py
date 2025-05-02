@@ -1,8 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, Header
+from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from scrap import get_html, parse_polizei_html, parse_meeting_html
 from fastapi_utils.tasks import repeat_every
 import db
+import dotenv
+import os
+
+dotenv.load_dotenv()
+
+
 
 def create_app():
     app = FastAPI()
@@ -23,10 +30,19 @@ async def update_db():
     polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
     meeting_html= get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege')
     polizei = parse_polizei_html(polizei_html)
-    res = db.upsert_into_supabase_polizei(polizei)
+    res = db.insert_only_new_polizei_data(polizei)
     meetings = parse_meeting_html(meeting_html)
-    resm = db.upsert_into_supabase_meeting(meetings)
-    
+    resm = db.insert_only_new_meeting_data(meetings)
+
+def verify_password(password: Optional[str] = Header(None, alias="X-Password")):
+    if password != os.environ.get("SECRET_PASSWORD"):
+        raise HTTPException(
+            status_code=401,
+            detail="Wrong password",
+            headers={"WWW-Authenticate": "Password"},
+        )
+    return password
+
 
 app = create_app()
 
@@ -64,3 +80,19 @@ def get_meeting_by_keyword_and_datum(keyword: str, datum: str):
         return {"data": data}
     else:
         return {"message": "No data found."}
+    
+    
+@app.get("/update_polizei", dependencies=[Depends(verify_password)])
+def update_polizei_endpoint():
+    polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
+    polizei = parse_polizei_html(polizei_html)
+    res = db.insert_only_new_polizei_data(polizei)
+    return {"message": "Polizei updated successfully."}
+
+@app.get("/update_meetings", dependencies=[Depends(verify_password)])
+def update_meetings_endpoint():
+    meeting_html= get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege')
+    meetings = parse_meeting_html(meeting_html)
+    resm = db.insert_only_new_meeting_data(meetings)
+    return {"message": "Meetings updated successfully."}
+
