@@ -57,16 +57,16 @@ def read_root():
 
 
 @app.get("/police_report_by_keyword/{keyword}")
-def get_polizei_by_keyword(keyword: str):
-    data = db.find_polizei_by_keyword_supabase(keyword)
+async def get_polizei_by_keyword(keyword: str):
+    data = await db.find_polizei_by_keyword_supabase(keyword)
     if data:
         return {"data": data}
     else:
         return {"message": "No data found."}
     
 @app.get("/meeting_by_keyword/{keyword}")
-def get_meeting_by_keyword(keyword: str):
-    data = db.find_meeting_by_keyword_supabase(keyword)
+async def get_meeting_by_keyword(keyword: str):
+    data = await db.find_meeting_by_keyword_supabase(keyword)
     if data:
         return {"data": data}
     else:
@@ -74,8 +74,8 @@ def get_meeting_by_keyword(keyword: str):
 
     
 @app.get("/meeting_by_keyword_and_datum/{keyword}/{datum}")
-def get_meeting_by_keyword_and_datum(keyword: str, datum: str):
-    data = db.find_meeting_by_datum_and_keyword_supabase(datum, keyword)
+async def get_meeting_by_keyword_and_datum(keyword: str, datum: str):
+    data = await db.find_meeting_by_datum_and_keyword_supabase(datum, keyword)
     if data:
         return {"data": data}
     else:
@@ -83,19 +83,21 @@ def get_meeting_by_keyword_and_datum(keyword: str, datum: str):
     
     
 @app.get("/update_polizei", dependencies=[Depends(verify_password)])
-def update_polizei_endpoint():
+async def update_polizei_endpoint():
     polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
     polizei = parse_polizei_html(polizei_html)
-    res = db.insert_only_new_polizei_data(polizei)
+    res = await db.insert_only_new_polizei_data(polizei)
     return {"message": "Polizei updated successfully."}
 
 @app.get("/update_meetings", dependencies=[Depends(verify_password)])
-def update_meetings_endpoint():
+async def update_meetings_endpoint():
     meeting_html= get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege')
     meetings = parse_meeting_html(meeting_html)
-    resm = db.insert_only_new_meeting_data(meetings)
+    resm = await db.insert_only_new_meeting_data(meetings)
     return {"message": "Meetings updated successfully."}
 
 @app.head("/health")
-def health_check():
+async def health_check():
+    await update_meetings_endpoint()
+    await update_polizei_endpoint()
     return {"status": "ok"}
