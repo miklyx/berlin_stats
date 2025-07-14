@@ -57,16 +57,16 @@ def read_root():
 
 
 @app.get("/police_report_by_keyword/{keyword}")
-async def get_polizei_by_keyword(keyword: str):
-    data = await db.find_polizei_by_keyword_supabase(keyword)
+def get_polizei_by_keyword(keyword: str):
+    data = db.find_polizei_by_keyword_supabase(keyword)
     if data:
         return {"data": data}
     else:
         return {"message": "No data found."}
     
 @app.get("/meeting_by_keyword/{keyword}")
-async def get_meeting_by_keyword(keyword: str):
-    data = await db.find_meeting_by_keyword_supabase(keyword)
+def get_meeting_by_keyword(keyword: str):
+    data = db.find_meeting_by_keyword_supabase(keyword)
     if data:
         return {"data": data}
     else:
@@ -74,8 +74,8 @@ async def get_meeting_by_keyword(keyword: str):
 
     
 @app.get("/meeting_by_keyword_and_datum/{keyword}/{datum}")
-async def get_meeting_by_keyword_and_datum(keyword: str, datum: str):
-    data = await db.find_meeting_by_datum_and_keyword_supabase(datum, keyword)
+def get_meeting_by_keyword_and_datum(keyword: str, datum: str):
+    data = db.find_meeting_by_datum_and_keyword_supabase(datum, keyword)
     if data:
         return {"data": data}
     else:
