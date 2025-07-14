@@ -210,14 +210,14 @@ def insert_only_new_meeting_data(data):
 
 
 
-def upsert_into_supabase_meeting(data):
+async def upsert_into_supabase_meeting(data):
     for item in data:
-        supabase.table("meeting").upsert(item).execute()
+        await supabase.table("meeting").upsert(item).execute()
     print("Data upserted into Supabase 'meeting' table successfully.")
 
 
-def find_meeting_by_keyword_supabase(keyword):
-    data = supabase.table("meeting").select("*").ilike("thema", f"%{keyword}%").execute()
+async def find_meeting_by_keyword_supabase(keyword):
+    data = await supabase.table("meeting").select("*").ilike("thema", f"%{keyword}%").execute()
     if data.data:
         print(f"Meeting found with keyword '{keyword}': {data.data}")
         return data.data
@@ -225,8 +225,8 @@ def find_meeting_by_keyword_supabase(keyword):
         print(f"No meeting found with keyword '{keyword}'.")
         
         
-def find_polizei_by_keyword_supabase(keyword):
-    data = supabase.table("polizei").select("*").ilike("details", f"%{keyword}%").execute()
+async def find_polizei_by_keyword_supabase(keyword):
+    data = await supabase.table("polizei").select("*").ilike("details", f"%{keyword}%").execute()
     if data.data:
         print(f"Polizei record found with keyword '{keyword}': {data.data}")
         return data.data
@@ -234,8 +234,8 @@ def find_polizei_by_keyword_supabase(keyword):
         print(f"No polizei record found with keyword '{keyword}'.")
 
 
-def find_meeting_by_datum_and_keyword_supabase(datum, keyword):
-    data = supabase.table("meeting").select("*").ilike("thema", f"%{keyword}%").eq("datum", datum).execute()
+async def find_meeting_by_datum_and_keyword_supabase(datum, keyword):
+    data = await supabase.table("meeting").select("*").ilike("thema", f"%{keyword}%").eq("datum", datum).execute()
     if data.data:
         print(f"Meeting found with keyword '{keyword}' and datum '{datum}': {data.data}")
         return data.data
