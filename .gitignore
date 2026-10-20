@@ -6,4 +6,3 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
-k8s/secret.yaml

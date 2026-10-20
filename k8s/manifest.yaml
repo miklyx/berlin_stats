@@ -1,3 +1,23 @@
+# Secret is NOT stored in git. Create it once:
+#   kubectl -n berlin-stats create secret generic berlin-stats --from-literal=SECRET_PASSWORD='...'
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: berlin-stats
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: berlin-stats
+  namespace: berlin-stats
+spec:
+  selector:
+    app: berlin-stats
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
