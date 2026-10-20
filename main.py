@@ -2,17 +2,25 @@ from fastapi import FastAPI, Depends, HTTPException, Header
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from scrap import get_html, parse_polizei_html, parse_meeting_html
-from fastapi_utils.tasks import repeat_every
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 import db
 import dotenv
 import os
 
 dotenv.load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+POLIZEI_URL = 'https://www.berlin.de/polizei/polizeimeldungen'
+MEETINGS_URL = 'https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege'
+
 
 
 def create_app():
-    app = FastAPI()
+    app = FastAPI(lifespan=lifespan)
 
     # CORS middleware
     app.add_middleware(
@@ -25,14 +33,38 @@ def create_app():
 
     return app
 
-@repeat_every(seconds=3600)  # Run twice a day
-async def update_db():
-    polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
-    meeting_html= get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege')
-    polizei = parse_polizei_html(polizei_html)
-    res = db.insert_only_new_polizei_data(polizei)
-    meetings = parse_meeting_html(meeting_html)
-    resm = db.insert_only_new_meeting_data(meetings)
+def poll_once():
+    polizei = parse_polizei_html(get_html(POLIZEI_URL))
+    meetings = parse_meeting_html(get_html(MEETINGS_URL))
+    return db.insert_only_new_polizei_data(polizei), db.insert_only_new_meeting_data(meetings)
+
+
+async def poll_loop():
+    interval = float(os.environ.get("POLL_INTERVAL_HOURS", "24")) * 3600
+    if os.environ.get("POLL_ON_STARTUP", "true").lower() not in ("0", "false", "no"):
+        delay = 0
+    else:
+        delay = interval
+    while True:
+        await asyncio.sleep(delay)
+        delay = interval
+        try:
+            new_polizei, new_meetings = await asyncio.to_thread(poll_once)
+            logger.info("Poll done: %d new polizei, %d new meetings", new_polizei, new_meetings)
+        except Exception:
+            logger.exception("Poll failed")
+
+
+@asynccontextmanager
+async def lifespan(app):
+    db.init_db()
+    task = asyncio.create_task(poll_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 def verify_password(password: Optional[str] = Header(None, alias="X-Password")):
     if password != os.environ.get("SECRET_PASSWORD"):
@@ -45,11 +77,6 @@ def verify_password(password: Optional[str] = Header(None, alias="X-Password")):
 
 
 app = create_app()
-
-@app.on_event("startup")
-async def startup_event():
-    db.init_db()
-    await update_db()
 
 @app.get("/")
 def read_root():
