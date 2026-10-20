@@ -123,7 +123,6 @@ def update_meetings_endpoint():
     resm = db.insert_only_new_meeting_data(meetings)
     return {"message": "Meetings updated successfully."}
 
-@app.head("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
-    return None
     return {"status": "ok"}

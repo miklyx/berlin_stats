@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: berlin-stats
+  namespace: berlin-stats
+spec:
+  serviceName: berlin-stats
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: berlin-stats
+  template:
+    metadata:
+      labels:
+        app: berlin-stats
+    spec:
+      # Uncomment if the ghcr package is private:
+      # imagePullSecrets:
+      #   - name: ghcr-pull
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: berlin-stats
+          image: ghcr.io/miklyx/berlin_stats:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DB_PATH
+              value: /data/berlin_stats.db
+            - name: POLL_INTERVAL_HOURS
+              value: "24"
+            - name: SECRET_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: berlin-stats
+                  key: SECRET_PASSWORD
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi
