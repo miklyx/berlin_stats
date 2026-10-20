@@ -1,6 +1,5 @@
 from bs4 import BeautifulSoup
 import requests
-import db
 
 def get_html(url):
     response = requests.get(url)
@@ -46,22 +45,9 @@ def parse_meeting_html(html):
 
 
 
-if __name__ == "__main__": 
-    #polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
-    meeting_html= get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege')
-    meetings = parse_meeting_html(meeting_html)
-    #polizei = parse_polizei_html(polizei_html)
-    #print(meetings)
-    
-    res = db.upsert_into_supabase_meeting(meetings)
-    #print(res)
-    
-    #polizei_record_html = get_html('https://www.berlin.de/polizei/polizeimeldungen/2025/pressemitteilung.1546705.php')
-    #print(parse_polizei_html(polizei_html))
-    #conn = db.connect_db('polizei.db')
-    #db.create_table_meeting(conn)
-    #db.drop_tables(conn)
-    #db.create_table_polizei(conn)
-    #db.insert_polizei_data(conn, polizei)
-    #db.insert_meeting_data(conn, meetings)
-    #print("Data inserted successfully.")
+if __name__ == "__main__":
+    import db
+
+    db.init_db()
+    meetings = parse_meeting_html(get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege'))
+    print(db.insert_only_new_meeting_data(meetings))

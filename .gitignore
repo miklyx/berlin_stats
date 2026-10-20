@@ -1,0 +1,8 @@
+.env
+*temp*.*
+/env
+__pycache__/
+.gitignoredata/
+*.db
+*.db-wal
+*.db-shm
