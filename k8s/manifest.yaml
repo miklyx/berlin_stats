@@ -18,6 +18,25 @@ spec:
       port: 80
       targetPort: 8000
 ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: berlin-stats
+  namespace: berlin-stats
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: berlin.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: berlin-stats
+                port:
+                  number: 80
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
