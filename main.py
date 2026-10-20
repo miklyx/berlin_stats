@@ -20,7 +20,7 @@ MEETINGS_URL = 'https://www.berlin.de/polizei/service/versammlungsbehoerde/versa
 
 
 def create_app():
-    app = FastAPI(lifespan=lifespan)
+    app = FastAPI(lifespan=lifespan, root_path=os.environ.get("ROOT_PATH", ""))
 
     # CORS middleware
     app.add_middleware(

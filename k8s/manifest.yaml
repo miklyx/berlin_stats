@@ -78,6 +78,8 @@ spec:
           env:
             - name: DB_PATH
               value: /data/berlin_stats.db
+            - name: ROOT_PATH
+              value: /berlin-stats
             - name: POLL_INTERVAL_HOURS
               value: "24"
             - name: SECRET_PASSWORD
