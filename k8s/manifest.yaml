@@ -35,9 +35,8 @@ spec:
       labels:
         app: berlin-stats
     spec:
-      # Uncomment if the ghcr package is private:
-      # imagePullSecrets:
-      #   - name: ghcr-pull
+      imagePullSecrets:
+        - name: ghcr-secret
       securityContext:
         fsGroup: 10001
       containers:
