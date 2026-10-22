@@ -1,8 +1,7 @@
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    DB_PATH=/data/berlin_stats.db
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
@@ -11,7 +10,7 @@ RUN pip install -r requirements.txt
 
 COPY main.py db.py scrap.py ./
 
-RUN useradd --uid 10001 --no-create-home app && mkdir /data && chown app /data
+RUN useradd --uid 10001 --no-create-home app
 USER 10001
 
 EXPOSE 8000

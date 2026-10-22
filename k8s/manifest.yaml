@@ -1,5 +1,6 @@
 # Secret is NOT stored in git. Create it once:
 #   kubectl -n berlin-stats create secret generic berlin-stats --from-literal=SECRET_PASSWORD='...'
+#   kubectl -n berlin-stats create secret generic berlin-stats-db --from-literal=DATABASE_URL='postgresql://berlin_stats:PASSWORD@postgres.postgres.svc.cluster.local:5432/berlin_stats'
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -49,14 +50,12 @@ spec:
                   number: 80
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: berlin-stats
   namespace: berlin-stats
 spec:
-  serviceName: berlin-stats
   replicas: 3
-  podManagementPolicy: Parallel
   selector:
     matchLabels:
       app: berlin-stats
@@ -67,8 +66,6 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-secret
-      securityContext:
-        fsGroup: 10001
       containers:
         - name: berlin-stats
           image: ghcr.io/miklyx/berlin_stats:latest
@@ -76,12 +73,15 @@ spec:
           ports:
             - containerPort: 8000
           env:
-            - name: DB_PATH
-              value: /data/berlin_stats.db
             - name: ROOT_PATH
               value: /berlin-stats
             - name: POLL_INTERVAL_HOURS
               value: "24"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: berlin-stats-db
+                  key: DATABASE_URL
             - name: SECRET_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -104,14 +104,3 @@ spec:
               memory: 128Mi
             limits:
               memory: 384Mi
-          volumeMounts:
-            - name: data
-              mountPath: /data
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: [ReadWriteOnce]
-        resources:
-          requests:
-            storage: 1Gi

@@ -34,9 +34,13 @@ def create_app():
     return app
 
 def poll_once():
-    polizei = parse_polizei_html(get_html(POLIZEI_URL), skip_urls=db.existing_polizei_urls())
-    meetings = parse_meeting_html(get_html(MEETINGS_URL))
-    return db.insert_only_new_polizei_data(polizei), db.insert_only_new_meeting_data(meetings)
+    # only one replica polls at a time; the others skip this round
+    with db.poll_lock() as acquired:
+        if not acquired:
+            return None
+        polizei = parse_polizei_html(get_html(POLIZEI_URL), skip_urls=db.existing_polizei_urls())
+        meetings = parse_meeting_html(get_html(MEETINGS_URL))
+        return db.insert_only_new_polizei_data(polizei), db.insert_only_new_meeting_data(meetings)
 
 
 async def poll_loop():
@@ -49,8 +53,11 @@ async def poll_loop():
         await asyncio.sleep(delay)
         delay = interval
         try:
-            new_polizei, new_meetings = await asyncio.to_thread(poll_once)
-            logger.info("Poll done: %d new polizei, %d new meetings", new_polizei, new_meetings)
+            result = await asyncio.to_thread(poll_once)
+            if result is None:
+                logger.info("Poll skipped: another replica is polling")
+            else:
+                logger.info("Poll done: %d new polizei, %d new meetings", *result)
         except Exception:
             logger.exception("Poll failed")
 
@@ -65,6 +72,7 @@ async def lifespan(app):
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+        db.close_pool()
 
 def verify_password(password: Optional[str] = Header(None, alias="X-Password")):
     if password != os.environ.get("SECRET_PASSWORD"):
