@@ -1,0 +1,16 @@
+# k3s-managed Traefik: expose an extra TCP entryPoint for PostgreSQL.
+# Apply once; the Traefik pod restarts and the LoadBalancer gets port 5432.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    ports:
+      postgres:
+        port: 5432
+        exposedPort: 5432
+        protocol: TCP
+        expose:
+          default: true
