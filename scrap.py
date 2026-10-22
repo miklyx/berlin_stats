@@ -1,21 +1,50 @@
-from bs4 import BeautifulSoup
+import logging
+import time
+
 import requests
+from bs4 import BeautifulSoup
 
-def get_html(url):
-    response = requests.get(url)
-    return response.text
 
-def parse_polizei_html(html):
+logger = logging.getLogger(__name__)
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept-Language": "de,en;q=0.8",
+}
+_session = requests.Session()
+_session.headers.update(HEADERS)
+
+
+def get_html(url, retries=3, timeout=20):
+    for attempt in range(1, retries + 1):
+        try:
+            response = _session.get(url, timeout=timeout)
+            response.raise_for_status()
+            return response.text
+        except requests.RequestException:
+            if attempt == retries:
+                raise
+            time.sleep(2 * attempt)
+
+
+def parse_polizei_html(html, skip_urls=frozenset(), delay=0.5):
     soup = BeautifulSoup(html, 'html.parser')
     data = []
     for item in soup.find('ul', class_='list--tablelist').find_all('li'):
-        time = item.find('div', class_='cell nowrap date').text
+        url = 'https://www.berlin.de' + item.find('a')['href']
+        if url in skip_urls:
+            continue
+        time_text = item.find('div', class_='cell nowrap date').text
         title = item.find('div', class_='cell text').text
         district = item.find('span', class_='category').text.split('Ereignisort: ')[1].strip()
-        url = 'https://www.berlin.de'+item.find('a')['href']
-        details_html= get_html(url)
-        details = parse_polizei_record_html(details_html)
-        data.append({'title': title, 'time': time, 'district': district, 'url': url, 'details': details})
+        try:
+            time.sleep(delay)
+            details = parse_polizei_record_html(get_html(url))
+        except Exception:
+            # not saved, so it is picked up again on the next poll
+            logger.warning("Skipping %s: failed to fetch details", url, exc_info=True)
+            continue
+        data.append({'title': title, 'time': time_text, 'district': district, 'url': url, 'details': details})
     return data
 
 def parse_polizei_record_html(html):

@@ -75,6 +75,12 @@ def _insert_new(table, columns, rows):
     return inserted
 
 
+def existing_polizei_urls():
+    with closing(connect()) as conn:
+        conn.executescript(SCHEMA)
+        return {r[0] for r in conn.execute("SELECT url FROM polizei")}
+
+
 def insert_only_new_polizei_data(data):
     rows = [{k: item.get(k) for k in POLIZEI_COLUMNS} for item in data]
     return _insert_new("polizei", POLIZEI_COLUMNS, rows)

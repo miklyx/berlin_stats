@@ -34,7 +34,7 @@ def create_app():
     return app
 
 def poll_once():
-    polizei = parse_polizei_html(get_html(POLIZEI_URL))
+    polizei = parse_polizei_html(get_html(POLIZEI_URL), skip_urls=db.existing_polizei_urls())
     meetings = parse_meeting_html(get_html(MEETINGS_URL))
     return db.insert_only_new_polizei_data(polizei), db.insert_only_new_meeting_data(meetings)
 
@@ -112,7 +112,7 @@ def get_meeting_by_keyword_and_datum(keyword: str, datum: str):
 @app.get("/update_polizei", dependencies=[Depends(verify_password)])
 def update_polizei_endpoint():
     polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
-    polizei = parse_polizei_html(polizei_html)
+    polizei = parse_polizei_html(polizei_html, skip_urls=db.existing_polizei_urls())
     res = db.insert_only_new_polizei_data(polizei)
     return {"message": "Polizei updated successfully."}
 
