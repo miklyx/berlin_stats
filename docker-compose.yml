@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: berlin_stats
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -17,7 +17,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/berlin_stats
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/berlin_stats
       SECRET_PASSWORD: ${SECRET_PASSWORD:-change-me}
       POLL_ON_STARTUP: ${POLL_ON_STARTUP:-true}
     ports:

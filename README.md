@@ -49,6 +49,7 @@ curl -H "X-Password: change-me" http://localhost:8000/update_meetings
 With Docker:
 
 ```bash
+cp .env.example .env        # set POSTGRES_PASSWORD
 docker compose up --build   # API on http://localhost:8000, first poll runs on startup
 ```
 
@@ -75,8 +76,8 @@ uvicorn main:app --reload
 
 ```bash
 pip install -r requirements-dev.txt
-docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres pytest
+docker run -d -p 5432:5432 -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16
+DATABASE_URL=postgresql://postgres@localhost:5432/postgres pytest
 ruff check .
 ```
 

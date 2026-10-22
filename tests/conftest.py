@@ -4,7 +4,7 @@ from pathlib import Path
 import psycopg
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
+os.environ.setdefault("DATABASE_URL", "postgresql://postgres@localhost:5432/postgres")
 os.environ["SECRET_PASSWORD"] = "secret"
 os.environ["POLL_ON_STARTUP"] = "false"
 
