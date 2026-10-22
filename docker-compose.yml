@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: berlin_stats
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d berlin_stats"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/berlin_stats
+      SECRET_PASSWORD: ${SECRET_PASSWORD:-change-me}
+      POLL_ON_STARTUP: ${POLL_ON_STARTUP:-true}
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:

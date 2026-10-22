@@ -1,8 +1,11 @@
 .env
 *temp*.*
 /env
+/.venv
 __pycache__/
-.gitignoredata/
+.pytest_cache/
+.ruff_cache/
+data/
 *.db
 *.db-wal
 *.db-shm

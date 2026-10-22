@@ -1,9 +1,9 @@
 import logging
 import time
+from collections.abc import Collection
 
 import requests
 from bs4 import BeautifulSoup
-
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ _session = requests.Session()
 _session.headers.update(HEADERS)
 
 
-def get_html(url, retries=3, timeout=20):
+def get_html(url: str, retries: int = 3, timeout: float = 20) -> str:
     for attempt in range(1, retries + 1):
         try:
             response = _session.get(url, timeout=timeout)
@@ -27,7 +27,7 @@ def get_html(url, retries=3, timeout=20):
             time.sleep(2 * attempt)
 
 
-def parse_polizei_html(html, skip_urls=frozenset(), delay=0.5):
+def parse_polizei_html(html: str, skip_urls: Collection[str] = frozenset(), delay: float = 0.5) -> list[dict]:
     soup = BeautifulSoup(html, 'html.parser')
     data = []
     for item in soup.find('ul', class_='list--tablelist').find_all('li'):
@@ -47,36 +47,16 @@ def parse_polizei_html(html, skip_urls=frozenset(), delay=0.5):
         data.append({'title': title, 'time': time_text, 'district': district, 'url': url, 'details': details})
     return data
 
-def parse_polizei_record_html(html):
+def parse_polizei_record_html(html: str) -> str:
     soup = BeautifulSoup(html, 'html.parser')
-    text = ""
-    for item in soup.find('div', class_='textile').find_all('p'):
-        text += item.text
-        
-    return text
+    return "".join(p.text for p in soup.find('div', class_='textile').find_all('p'))
 
-def parse_meeting_html(html):
+def parse_meeting_html(html: str) -> list[dict]:
     soup = BeautifulSoup(html, 'html.parser')
-    headers = []
-    for th in soup.find('thead').find_all('th'):
-        headers.append(th.get('id'))
-    
+    headers = [th.get('id') for th in soup.find('thead').find_all('th')]
+
     rows_data = []
-    
     for tr in soup.find('tbody').find_all('tr'):
-        row = {}
-        for i, td in enumerate(tr.find_all('td')):
-            if i < len(headers):
-                row[headers[i]] = td.text.strip()
-        rows_data.append(row)
-    
+        cells = [td.text.strip() for td in tr.find_all('td')]
+        rows_data.append(dict(zip(headers, cells, strict=False)))
     return rows_data
-
-
-
-if __name__ == "__main__":
-    import db
-
-    db.init_db()
-    meetings = parse_meeting_html(get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege'))
-    print(db.insert_only_new_meeting_data(meetings))

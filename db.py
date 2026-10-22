@@ -1,6 +1,8 @@
 import logging
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import dotenv
 import psycopg
@@ -41,10 +43,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_meeting_key ON meeting(von, datum, thema);
 MEETING_COLUMNS = ("datum", "von", "bis", "thema", "plz", "versammlungsort", "aufzugsstrecke")
 POLIZEI_COLUMNS = ("title", "time", "district", "url", "details")
 
-_pool = None
+_pool: ConnectionPool | None = None
 
 
-def get_pool():
+def get_pool() -> ConnectionPool:
     global _pool
     if _pool is None:
         _pool = ConnectionPool(
@@ -57,14 +59,14 @@ def get_pool():
     return _pool
 
 
-def close_pool():
+def close_pool() -> None:
     global _pool
     if _pool is not None:
         _pool.close()
         _pool = None
 
 
-def init_db():
+def init_db() -> None:
     with get_pool().connection() as conn:
         # replicas start together; serialize schema creation
         conn.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK_ID,))
@@ -72,18 +74,18 @@ def init_db():
 
 
 @contextmanager
-def poll_lock():
+def poll_lock() -> Iterator[bool]:
     """Yields True for the one replica that gets to poll, False for the others."""
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
         got = conn.execute("SELECT pg_try_advisory_lock(%s)", (POLL_LOCK_ID,)).fetchone()[0]
         yield got
 
 
-def _clean(value):
+def _clean(value: Any) -> Any:
     return value.strip() if isinstance(value, str) else (value or "")
 
 
-def _insert_new(table, columns, rows):
+def _insert_new(table: str, columns: tuple[str, ...], rows: list[dict]) -> int:
     sql = (
         f"INSERT INTO {table} ({', '.join(columns)}) "
         f"VALUES ({', '.join(['%s'] * len(columns))}) ON CONFLICT DO NOTHING"
@@ -98,42 +100,50 @@ def _insert_new(table, columns, rows):
     return inserted
 
 
-def existing_polizei_urls():
+def existing_polizei_urls() -> set[str]:
     with get_pool().connection() as conn:
         return {r["url"] for r in conn.execute("SELECT url FROM polizei")}
 
 
-def insert_only_new_polizei_data(data):
+def insert_only_new_polizei_data(data: list[dict]) -> int:
     return _insert_new("polizei", POLIZEI_COLUMNS, data)
 
 
-def insert_only_new_meeting_data(data):
+def insert_only_new_meeting_data(data: list[dict]) -> int:
     # scraper returns capitalised header ids (Datum, Von, ...)
     rows = [{k.lower(): v for k, v in item.items()} for item in data]
     return _insert_new("meeting", MEETING_COLUMNS, rows)
 
 
-def _like(keyword):
+def _like(keyword: str) -> str:
     escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
 
 
-def _search(sql, params):
+def _search(sql: str, params: tuple) -> list[dict] | None:
     with get_pool().connection() as conn:
         rows = conn.execute(sql, params).fetchall()
     return rows or None
 
 
-def find_meeting_by_keyword(keyword):
-    return _search("SELECT * FROM meeting WHERE thema ILIKE %s ORDER BY id", (_like(keyword),))
-
-
-def find_polizei_by_keyword(keyword):
-    return _search("SELECT * FROM polizei WHERE details ILIKE %s ORDER BY id", (_like(keyword),))
-
-
-def find_meeting_by_datum_and_keyword(datum, keyword):
+def find_meeting_by_keyword(keyword: str, limit: int = 100, offset: int = 0) -> list[dict] | None:
     return _search(
-        "SELECT * FROM meeting WHERE thema ILIKE %s AND datum = %s ORDER BY id",
-        (_like(keyword), datum),
+        "SELECT * FROM meeting WHERE thema ILIKE %s ORDER BY id LIMIT %s OFFSET %s",
+        (_like(keyword), limit, offset),
+    )
+
+
+def find_polizei_by_keyword(keyword: str, limit: int = 100, offset: int = 0) -> list[dict] | None:
+    return _search(
+        "SELECT * FROM polizei WHERE details ILIKE %s ORDER BY id LIMIT %s OFFSET %s",
+        (_like(keyword), limit, offset),
+    )
+
+
+def find_meeting_by_datum_and_keyword(
+    datum: str, keyword: str, limit: int = 100, offset: int = 0
+) -> list[dict] | None:
+    return _search(
+        "SELECT * FROM meeting WHERE thema ILIKE %s AND datum = %s ORDER BY id LIMIT %s OFFSET %s",
+        (_like(keyword), datum, limit, offset),
     )

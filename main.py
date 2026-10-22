@@ -1,54 +1,50 @@
-from fastapi import FastAPI, Depends, HTTPException, Header
-from typing import Optional
-from fastapi.middleware.cors import CORSMiddleware
-from scrap import get_html, parse_polizei_html, parse_meeting_html
 import asyncio
 import logging
-from contextlib import asynccontextmanager, suppress
-import db
-import dotenv
 import os
+from contextlib import asynccontextmanager, suppress
+
+import dotenv
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+
+import db
+from scrap import get_html, parse_meeting_html, parse_polizei_html
 
 dotenv.load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-POLIZEI_URL = 'https://www.berlin.de/polizei/polizeimeldungen'
-MEETINGS_URL = 'https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege'
+POLIZEI_URL = "https://www.berlin.de/polizei/polizeimeldungen"
+MEETINGS_URL = "https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege"
+
+Limit = Query(100, ge=1, le=500, description="Max rows to return")
+Offset = Query(0, ge=0, description="Rows to skip")
 
 
+def update_polizei() -> int:
+    html = get_html(POLIZEI_URL)
+    # detail pages are only fetched for reports that are not stored yet
+    reports = parse_polizei_html(html, skip_urls=db.existing_polizei_urls())
+    return db.insert_only_new_polizei_data(reports)
 
-def create_app():
-    app = FastAPI(lifespan=lifespan, root_path=os.environ.get("ROOT_PATH", ""))
 
-    # CORS middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # Allow all origins
-        allow_credentials=True,
-        allow_methods=["*"],  # Allow all methods
-        allow_headers=["*"],  # Allow all headers
-    )
+def update_meetings() -> int:
+    return db.insert_only_new_meeting_data(parse_meeting_html(get_html(MEETINGS_URL)))
 
-    return app
 
-def poll_once():
+def poll_once() -> tuple[int, int] | None:
     # only one replica polls at a time; the others skip this round
     with db.poll_lock() as acquired:
         if not acquired:
             return None
-        polizei = parse_polizei_html(get_html(POLIZEI_URL), skip_urls=db.existing_polizei_urls())
-        meetings = parse_meeting_html(get_html(MEETINGS_URL))
-        return db.insert_only_new_polizei_data(polizei), db.insert_only_new_meeting_data(meetings)
+        return update_polizei(), update_meetings()
 
 
-async def poll_loop():
+async def poll_loop() -> None:
     interval = float(os.environ.get("POLL_INTERVAL_HOURS", "24")) * 3600
-    if os.environ.get("POLL_ON_STARTUP", "true").lower() not in ("0", "false", "no"):
-        delay = 0
-    else:
-        delay = interval
+    on_startup = os.environ.get("POLL_ON_STARTUP", "true").lower() not in ("0", "false", "no")
+    delay = 0 if on_startup else interval
     while True:
         await asyncio.sleep(delay)
         delay = interval
@@ -63,7 +59,7 @@ async def poll_loop():
 
 
 @asynccontextmanager
-async def lifespan(app):
+async def lifespan(app: FastAPI):
     db.init_db()
     task = asyncio.create_task(poll_loop())
     try:
@@ -74,8 +70,10 @@ async def lifespan(app):
             await task
         db.close_pool()
 
-def verify_password(password: Optional[str] = Header(None, alias="X-Password")):
-    if password != os.environ.get("SECRET_PASSWORD"):
+
+def verify_password(password: str | None = Header(None, alias="X-Password")) -> str:
+    expected = os.environ.get("SECRET_PASSWORD")
+    if not expected or password != expected:
         raise HTTPException(
             status_code=401,
             detail="Wrong password",
@@ -84,7 +82,29 @@ def verify_password(password: Optional[str] = Header(None, alias="X-Password")):
     return password
 
 
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Berlin stats",
+        description="Search Berlin police reports and registered demonstrations.",
+        lifespan=lifespan,
+        root_path=os.environ.get("ROOT_PATH", ""),
+    )
+    origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_methods=["GET", "HEAD"],
+        allow_headers=["*"],
+    )
+    return app
+
+
 app = create_app()
+
+
+def _wrap(data: list[dict] | None) -> dict:
+    return {"data": data} if data else {"message": "No data found."}
+
 
 @app.get("/")
 def read_root():
@@ -92,44 +112,29 @@ def read_root():
 
 
 @app.get("/police_report_by_keyword/{keyword}")
-def get_polizei_by_keyword(keyword: str):
-    data = db.find_polizei_by_keyword(keyword)
-    if data:
-        return {"data": data}
-    else:
-        return {"message": "No data found."}
-    
-@app.get("/meeting_by_keyword/{keyword}")
-def get_meeting_by_keyword(keyword: str):
-    data = db.find_meeting_by_keyword(keyword)
-    if data:
-        return {"data": data}
-    else:
-        return {"message": "No data found."}
+def get_polizei_by_keyword(keyword: str, limit: int = Limit, offset: int = Offset):
+    return _wrap(db.find_polizei_by_keyword(keyword, limit, offset))
 
-    
+
+@app.get("/meeting_by_keyword/{keyword}")
+def get_meeting_by_keyword(keyword: str, limit: int = Limit, offset: int = Offset):
+    return _wrap(db.find_meeting_by_keyword(keyword, limit, offset))
+
+
 @app.get("/meeting_by_keyword_and_datum/{keyword}/{datum}")
-def get_meeting_by_keyword_and_datum(keyword: str, datum: str):
-    data = db.find_meeting_by_datum_and_keyword(datum, keyword)
-    if data:
-        return {"data": data}
-    else:
-        return {"message": "No data found."}
-    
-    
+def get_meeting_by_keyword_and_datum(keyword: str, datum: str, limit: int = Limit, offset: int = Offset):
+    return _wrap(db.find_meeting_by_datum_and_keyword(datum, keyword, limit, offset))
+
+
 @app.get("/update_polizei", dependencies=[Depends(verify_password)])
 def update_polizei_endpoint():
-    polizei_html = get_html('https://www.berlin.de/polizei/polizeimeldungen')
-    polizei = parse_polizei_html(polizei_html, skip_urls=db.existing_polizei_urls())
-    res = db.insert_only_new_polizei_data(polizei)
-    return {"message": "Polizei updated successfully."}
+    return {"message": "Polizei updated successfully.", "new": update_polizei()}
+
 
 @app.get("/update_meetings", dependencies=[Depends(verify_password)])
 def update_meetings_endpoint():
-    meeting_html= get_html('https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege')
-    meetings = parse_meeting_html(meeting_html)
-    resm = db.insert_only_new_meeting_data(meetings)
-    return {"message": "Meetings updated successfully."}
+    return {"message": "Meetings updated successfully.", "new": update_meetings()}
+
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
