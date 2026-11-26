@@ -63,6 +63,9 @@ spec:
     metadata:
       labels:
         app: berlin-stats
+      annotations:
+        deployment.kubernetes.io/revision: "2"
+        image-pull-trigger: "2026-11-26T21:46:00Z"
     spec:
       imagePullSecrets:
         - name: ghcr-secret
