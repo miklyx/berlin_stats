@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
