@@ -30,21 +30,27 @@ def get_html(url: str, retries: int = 3, timeout: float = 20) -> str:
 def parse_polizei_html(html: str, skip_urls: Collection[str] = frozenset(), delay: float = 0.5) -> list[dict]:
     soup = BeautifulSoup(html, 'html.parser')
     data = []
-    for item in soup.find('ul', class_='list--tablelist').find_all('li'):
-        url = 'https://www.berlin.de' + item.find('a')['href']
-        if url in skip_urls:
-            continue
-        time_text = item.find('div', class_='cell nowrap date').text
-        title = item.find('div', class_='cell text').text
-        district = item.find('span', class_='category').text.split('Ereignisort: ')[1].strip()
+    
+    list_ul = soup.find('ul', class_='list--tablelist')
+    if list_ul is None:
+        logger.error("Could not find polizei list element (ul.list--tablelist)")
+        return data
+    
+    for item in list_ul.find_all('li'):
         try:
+            url = 'https://www.berlin.de' + item.find('a')['href']
+            if url in skip_urls:
+                continue
+            time_text = item.find('div', class_='cell nowrap date').text
+            title = item.find('div', class_='cell text').text
+            district = item.find('span', class_='category').text.split('Ereignisort: ')[1].strip()
             time.sleep(delay)
             details = parse_polizei_record_html(get_html(url))
+            data.append({'title': title, 'time': time_text, 'district': district, 'url': url, 'details': details})
         except Exception:
             # not saved, so it is picked up again on the next poll
-            logger.warning("Skipping %s: failed to fetch details", url, exc_info=True)
+            logger.warning("Skipping item: failed to fetch details", exc_info=True)
             continue
-        data.append({'title': title, 'time': time_text, 'district': district, 'url': url, 'details': details})
     return data
 
 def parse_polizei_record_html(html: str) -> str:
@@ -61,10 +67,24 @@ def parse_polizei_record_html(html: str) -> str:
 
 def parse_meeting_html(html: str) -> list[dict]:
     soup = BeautifulSoup(html, 'html.parser')
-    headers = [th.get('id') for th in soup.find('thead').find_all('th')]
+    
+    thead = soup.find('thead')
+    if thead is None:
+        logger.error("Could not find meetings table head (thead)")
+        return []
+    
+    tbody = soup.find('tbody')
+    if tbody is None:
+        logger.error("Could not find meetings table body (tbody)")
+        return []
+    
+    headers = [th.get('id') for th in thead.find_all('th')]
+    if not headers:
+        logger.error("Could not find table headers in thead")
+        return []
 
     rows_data = []
-    for tr in soup.find('tbody').find_all('tr'):
+    for tr in tbody.find_all('tr'):
         cells = [td.text.strip() for td in tr.find_all('td')]
         rows_data.append(dict(zip(headers, cells, strict=False)))
     return rows_data
