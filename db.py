@@ -151,3 +151,19 @@ def find_meeting_by_datum_and_keyword(
         "SELECT * FROM meeting WHERE thema ILIKE %s AND datum = %s ORDER BY id LIMIT %s OFFSET %s",
         (_like(keyword), datum, limit, offset),
     )
+
+
+def count_polizei() -> int:
+    """Get total count of polizei records"""
+    with get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM polizei")
+            return cur.fetchone()[0]
+
+
+def count_meetings() -> int:
+    """Get total count of meeting records"""
+    with get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM meeting")
+            return cur.fetchone()[0]

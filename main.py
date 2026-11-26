@@ -5,8 +5,9 @@ from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 
 import dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import Counter, Gauge, generate_latest
 
 import db
 from scrap import get_html, parse_meeting_html, parse_polizei_html
@@ -21,6 +22,14 @@ MEETINGS_URL = "https://www.berlin.de/polizei/service/versammlungsbehoerde/versa
 
 Limit = Query(100, ge=1, le=500, description="Max rows to return")
 Offset = Query(0, ge=0, description="Rows to skip")
+
+# Prometheus metrics
+polizei_records = Gauge('berlin_stats_polizei_records_total', 'Total polizei records in DB')
+meetings_records = Gauge('berlin_stats_meetings_records_total', 'Total meetings records in DB')
+polizei_added = Counter('berlin_stats_polizei_added_total', 'Polizei records added in this poll')
+meetings_added = Counter('berlin_stats_meetings_added_total', 'Meetings records added in this poll')
+poll_duration = Gauge('berlin_stats_poll_duration_seconds', 'Last poll duration in seconds')
+poll_errors = Counter('berlin_stats_poll_errors_total', 'Total poll errors')
 
 # Track last successful poll
 _last_poll_time: datetime | None = None
@@ -56,16 +65,30 @@ async def poll_loop() -> None:
         await asyncio.sleep(delay)
         delay = interval
         try:
+            start = datetime.utcnow()
             result = await asyncio.to_thread(poll_once)
             if result is None:
                 logger.info("Poll skipped: another replica is polling")
             else:
-                logger.info("Poll done: %d new polizei, %d new meetings", *result)
+                duration = (datetime.utcnow() - start).total_seconds()
+                polizei_count, meetings_count = result
+                logger.info("Poll done: %d new polizei, %d new meetings (%.1fs)", polizei_count, meetings_count, duration)
+                
+                # Update metrics
+                polizei_added.inc(polizei_count)
+                meetings_added.inc(meetings_count)
+                poll_duration.set(duration)
+                
+                # Update total counts from DB
+                polizei_records.set(db.count_polizei())
+                meetings_records.set(db.count_meetings())
+                
                 _last_poll_time = datetime.utcnow()
                 _last_poll_result = result
             consecutive_errors = 0
         except Exception:
             consecutive_errors += 1
+            poll_errors.inc()
             logger.exception("Poll failed (attempt %d)", consecutive_errors)
             if consecutive_errors >= 5:
                 logger.critical("Poll failed %d times in a row - possible permanent issue", consecutive_errors)
@@ -113,6 +136,12 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    return Response(content=generate_latest(), media_type="text/plain; version=0.0.4")
 
 
 def _wrap(data: list[dict] | None) -> dict:
