@@ -2,13 +2,13 @@
 
 ## Overview
 
-The berlin-stats service includes comprehensive Prometheus metrics for monitoring:
-- Total records in database (polizei and meetings)
-- Records added per poll cycle
-- Poll duration and errors
-- Scraper health status
+The monitoring stack includes:
+1. **Berlin-Stats Exporter** - Application-level metrics (poll duration, errors, etc.)
+2. **PostgreSQL Exporter** - Database metrics (record counts, DB size, latest timestamps, etc.)
+3. **Prometheus** - Metrics collection and storage
+4. **Grafana** - Visualization dashboards
 
-Grafana dashboards are pre-configured to visualize this data.
+This provides **independent monitoring** of both the service and the database.
 
 ---
 
@@ -21,7 +21,7 @@ Grafana dashboards are pre-configured to visualize this data.
 http://192.168.178.29/grafana
 ```
 - Default credentials: `admin` / `prom-operator` (may need to check Helm values)
-- Shows berlin-stats metrics in real-time graphs
+- Shows berlin-stats and PostgreSQL metrics in real-time graphs
 
 **Prometheus UI:**
 ```
@@ -34,28 +34,47 @@ http://192.168.178.29/prometheus
 
 ## Deployment
 
-### 1. Apply ServiceMonitor (enables Prometheus scraping)
+### Step 1: Create PostgreSQL Exporter Secret
+First, you need to set the PostgreSQL password in the secret:
+
 ```bash
-kubectl apply -f k8s/prometheus-servicemonitor.yaml
+ssh kuliki@192.168.178.29
+
+# Edit the secret with the actual PostgreSQL password
+sudo kubectl -n postgres create secret generic postgres-exporter \
+  --from-literal=DATABASE_URL='postgres://postgres:YOUR_PASSWORD@postgres.postgres.svc.cluster.local:5432/berlin_stats?sslmode=disable' \
+  --dry-run=client -o yaml | sudo kubectl apply -f -
 ```
 
-### 2. Apply Ingress rules (enables web access)
+### Step 2: Apply postgres-exporter deployment
 ```bash
-kubectl apply -f k8s/grafana-ingress.yaml
+sudo kubectl apply -f k8s/postgres-exporter.yaml
+sudo kubectl apply -f k8s/postgres-servicemonitor.yaml
 ```
 
-### 3. Verify metrics are flowing
+### Step 3: Apply berlin-stats ServiceMonitor & Grafana Ingress
 ```bash
-# Check if Prometheus sees berlin-stats target
+sudo kubectl apply -f k8s/prometheus-servicemonitor.yaml
+sudo kubectl apply -f k8s/grafana-ingress.yaml
+```
+
+### Step 4: Verify metrics are flowing
+```bash
+# Check if postgres-exporter is running
+kubectl -n postgres get pods | grep postgres-exporter
+
+# Check if Prometheus sees both targets
 curl http://192.168.178.29/prometheus/api/v1/targets
 
-# Query a metric directly
-curl 'http://192.168.178.29/prometheus/api/v1/query?query=berlin_stats_polizei_records_total'
+# Query a PostgreSQL metric directly
+curl 'http://192.168.178.29/prometheus/api/v1/query?query=pg_berlin_stats_polizei_total'
 ```
 
 ---
 
 ## Available Metrics
+
+### Berlin-Stats Service Metrics
 
 | Metric | Type | Description |
 |--------|------|-------------|
@@ -66,94 +85,169 @@ curl 'http://192.168.178.29/prometheus/api/v1/query?query=berlin_stats_polizei_r
 | `berlin_stats_poll_duration_seconds` | Gauge | Last poll execution time |
 | `berlin_stats_poll_errors_total` | Counter | Total poll failures |
 
+### PostgreSQL Database Metrics
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `pg_berlin_stats_polizei_total` | Gauge | Total polizei records (direct from DB) |
+| `pg_berlin_stats_meetings_total` | Gauge | Total meetings records (direct from DB) |
+| `pg_berlin_stats_latest_polizei_timestamp` | Gauge | Latest polizei record timestamp (Unix epoch) |
+| `pg_berlin_stats_latest_meeting_timestamp` | Gauge | Latest meeting record timestamp (Unix epoch) |
+| `pg_database_size_bytes` | Gauge | Size of berlin_stats database in bytes |
+| `pg_stat_activity` | Gauge | Active database connections |
+| `pg_database_age` | Gauge | Database age in transactions |
+
+---
+
+## Why Monitor PostgreSQL Directly?
+
+**Independence:**
+- If berlin-stats service crashes, we still see DB metrics
+- If /metrics endpoint fails, we still see real data
+- Database is source of truth
+
+**Detailed Insights:**
+- Record timestamps (is data actually new?)
+- Database size growth
+- Query performance
+- Connection pooling
+
+**Verification:**
+- Compare `berlin_stats_polizei_records_total` (from app) vs `pg_berlin_stats_polizei_total` (from DB)
+- If they differ, something's wrong with the app
+
 ---
 
 ## Creating Grafana Dashboards
 
-### Quick Start: Import Dashboard
-1. Go to **Grafana → Dashboards → New → Import**
-2. Use this PromQL to create panels:
+### Dashboard: Database Health
 
-**Panel: Polizei Records Growth**
-```
-rate(berlin_stats_polizei_added_total[1h])
+**Panel 1: Polizei Records (from DB)**
+```promql
+pg_berlin_stats_polizei_total
 ```
 
-**Panel: Meetings Records Growth**
-```
-rate(berlin_stats_meetings_added_total[1h])
+**Panel 2: Meetings Records (from DB)**
+```promql
+pg_berlin_stats_meetings_total
 ```
 
-**Panel: Last Poll Duration**
+**Panel 3: Last Polizei Update**
+```promql
+time() - pg_berlin_stats_latest_polizei_timestamp
+# This shows "seconds since last polizei record"
 ```
+
+**Panel 4: Last Meeting Update**
+```promql
+time() - pg_berlin_stats_latest_meeting_timestamp
+# This shows "seconds since last meeting record"
+```
+
+**Panel 5: Database Size**
+```promql
+pg_database_size_bytes / 1024 / 1024
+# Size in MB
+```
+
+### Dashboard: Service Health
+
+**Panel 1: Poll Duration**
+```promql
 berlin_stats_poll_duration_seconds
 ```
 
-**Panel: Poll Errors (last 24h)**
+**Panel 2: Records Added (Rate)**
+```promql
+rate(berlin_stats_polizei_added_total[1h])
+# Polizei records per hour
 ```
+
+**Panel 3: Poll Errors**
+```promql
 increase(berlin_stats_poll_errors_total[24h])
+# Errors in last 24 hours
 ```
 
-**Panel: Total Records**
-```
-berlin_stats_polizei_records_total + berlin_stats_meetings_records_total
+**Panel 4: Comparison (App vs DB)**
+```promql
+berlin_stats_polizei_records_total - pg_berlin_stats_polizei_total
+# If not 0, something's wrong!
 ```
 
-### Create Manual Dashboard
-1. In Grafana, click **+ → Dashboard**
-2. Click **Add a new panel**
-3. Under "Query", select "Prometheus" data source
-4. Paste PromQL queries above
-5. Configure visualization (graph, gauge, stat)
-6. Save dashboard
+---
+
+## Custom PostgreSQL Queries
+
+To add more custom metrics, edit `k8s/postgres-exporter.yaml` → `ConfigMap` section.
+
+Example: Track updates by date
+```yaml
+pg_berlin_stats_polizei_by_date:
+  query: "SELECT date, COUNT(*) as count FROM (SELECT DATE(CAST(time AS TIMESTAMP)) as date FROM berlin_stats.polizei) grouped GROUP BY date ORDER BY date DESC LIMIT 30"
+  metrics:
+    - name: pg_berlin_stats_polizei_by_date
+      type: gauge
+      valueLabel: count
+      labels:
+        - date
+```
+
+Then restart postgres-exporter:
+```bash
+kubectl -n postgres rollout restart deployment/postgres-exporter
+```
 
 ---
 
 ## Troubleshooting
 
-### Metrics not showing in Prometheus
+### postgres-exporter not running
+```bash
+kubectl -n postgres logs deployment/postgres-exporter
+# Check if secret DATABASE_URL is correct
+kubectl -n postgres get secret postgres-exporter -o yaml
+```
+
+### "No data" in PostgreSQL dashboard
 ```bash
 # Check if ServiceMonitor is created
-kubectl get servicemonitor -n berlin-stats
+kubectl get servicemonitor -n postgres
 
-# Check prometheus scrape config
-kubectl -n default exec -it $(kubectl -n default get pod -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}') -- cat /etc/prometheus/prometheus.yml | grep berlin-stats
-
-# Check berlin-stats metrics endpoint directly
-curl http://192.168.178.29/berlin-stats/metrics
+# Wait 2 minutes for first scrape, then:
+curl 'http://192.168.178.29/prometheus/api/v1/query?query=pg_berlin_stats_polizei_total'
 ```
 
-### Grafana not accessible
+### PostgreSQL metrics not updating
 ```bash
-# Check ingress
-kubectl get ingress -A | grep grafana
-
-# Check pod logs
-kubectl -n default logs deployment/monitoring-grafana
+# Test connection directly
+kubectl -n postgres exec -it postgres-0 -- psql -U postgres -d berlin_stats \
+  -c "SELECT COUNT(*) FROM polizei;"
 ```
 
-### "No data" in dashboard
-- Ensure `/metrics` endpoint is responding: `curl http://localhost/berlin-stats/metrics`
-- Wait ~2 minutes for Prometheus to scrape the first time
-- Verify poll_loop is running: check `/health/scraper` endpoint
+### Verify app is writing to DB
+```bash
+# Check if DB counts match app metrics
+curl http://192.168.178.29/berlin-stats/health/scraper | jq .last_result
+# Compare with:
+curl 'http://192.168.178.29/prometheus/api/v1/query?query=pg_berlin_stats_polizei_total'
+```
 
 ---
 
 ## Maintenance
 
-**Update poll interval alerting:**
-Edit `k8s/prometheus-servicemonitor.yaml` → `interval` field
+**Update scrape interval:**
+Edit `k8s/postgres-servicemonitor.yaml` → `interval` field (default: 60s)
 
-**Change scrape timeout:**
-Edit `k8s/prometheus-servicemonitor.yaml` → `scrapeTimeout` field
+**Update custom queries:**
+Edit `k8s/postgres-exporter.yaml` → `ConfigMap` queries.yaml section
 
-**Update Grafana credentials:**
+**Update PostgreSQL password:**
 ```bash
-kubectl -n default patch secret monitoring-grafana \
-  --patch '{"data":{"admin-password":"'$(echo -n 'newpassword' | base64)'"}}'
+kubectl -n postgres patch secret postgres-exporter \
+  --patch '{"data":{"DATABASE_URL":"'$(echo -n 'postgres://postgres:NEWPASSWORD@postgres.postgres.svc.cluster.local:5432/berlin_stats?sslmode=disable' | base64)'"}}'
+
+kubectl -n postgres rollout restart deployment/postgres-exporter
 ```
 
-Restart Grafana to apply changes:
-```bash
-kubectl -n default rollout restart deployment/monitoring-grafana
-```

@@ -1,0 +1,130 @@
+---
+# PostgreSQL Exporter for Prometheus
+# Monitors PostgreSQL metrics directly (record counts, DB size, connections, etc)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-exporter
+  namespace: postgres
+  labels:
+    app: postgres-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-exporter
+  template:
+    metadata:
+      labels:
+        app: postgres-exporter
+    spec:
+      containers:
+        - name: postgres-exporter
+          image: prometheuscommunity/postgres-exporter:v0.15.0
+          ports:
+            - containerPort: 9187
+              name: metrics
+          env:
+            # PostgreSQL connection string
+            - name: DATA_SOURCE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-exporter
+                  key: DATABASE_URL
+            # Queries to run (custom metrics)
+            - name: PG_EXPORTER_EXTEND_QUERY_PATH
+              value: /etc/postgres-exporter/queries.yaml
+          volumeMounts:
+            - name: custom-queries
+              mountPath: /etc/postgres-exporter
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+        - name: custom-queries
+          configMap:
+            name: postgres-exporter-queries
+---
+# Service for postgres-exporter
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-exporter
+  namespace: postgres
+  labels:
+    app: postgres-exporter
+spec:
+  selector:
+    app: postgres-exporter
+  ports:
+    - name: metrics
+      port: 9187
+      targetPort: 9187
+---
+# ConfigMap with custom queries for berlin_stats tables
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-exporter-queries
+  namespace: postgres
+data:
+  queries.yaml: |
+    pg_berlin_stats_polizei_total:
+      query: "SELECT COUNT(*) as count FROM berlin_stats.polizei"
+      metrics:
+        - name: pg_berlin_stats_polizei_total
+          help: "Total polizei records in berlin_stats database"
+          type: gauge
+          valueLabel: count
+    
+    pg_berlin_stats_meetings_total:
+      query: "SELECT COUNT(*) as count FROM berlin_stats.meeting"
+      metrics:
+        - name: pg_berlin_stats_meetings_total
+          help: "Total meeting records in berlin_stats database"
+          type: gauge
+          valueLabel: count
+    
+    pg_berlin_stats_latest_polizei:
+      query: "SELECT EXTRACT(EPOCH FROM MAX(CAST(time AS TIMESTAMP))) as latest_epoch FROM berlin_stats.polizei"
+      metrics:
+        - name: pg_berlin_stats_latest_polizei_timestamp
+          help: "Latest polizei record timestamp (Unix epoch)"
+          type: gauge
+          valueLabel: latest_epoch
+    
+    pg_berlin_stats_latest_meeting:
+      query: "SELECT EXTRACT(EPOCH FROM MAX(CAST(datum AS TIMESTAMP))) as latest_epoch FROM berlin_stats.meeting"
+      metrics:
+        - name: pg_berlin_stats_latest_meeting_timestamp
+          help: "Latest meeting record timestamp (Unix epoch)"
+          type: gauge
+          valueLabel: latest_epoch
+    
+    pg_database_size_bytes:
+      query: "SELECT datname, pg_database_size(datname) as size_bytes FROM pg_database WHERE datname = 'berlin_stats'"
+      metrics:
+        - name: pg_database_size_bytes
+          help: "Size of database in bytes"
+          type: gauge
+          valueLabel: size_bytes
+          labels:
+            - datname
+
+---
+# Secret with PostgreSQL connection string for exporter
+# MUST BE CREATED MANUALLY - replace PASSWORD with actual password
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-exporter
+  namespace: postgres
+type: Opaque
+stringData:
+  # Format: postgres://user:password@host:port/database
+  # postgres-exporter will use this to connect
+  DATABASE_URL: "postgres://postgres:PASSWORD@postgres.postgres.svc.cluster.local:5432/berlin_stats?sslmode=disable"
