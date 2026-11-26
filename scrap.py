@@ -49,7 +49,15 @@ def parse_polizei_html(html: str, skip_urls: Collection[str] = frozenset(), dela
 
 def parse_polizei_record_html(html: str) -> str:
     soup = BeautifulSoup(html, 'html.parser')
-    return "".join(p.text for p in soup.find('div', class_='textile').find_all('p'))
+    textile_div = soup.find('div', class_='textile')
+    if textile_div is None:
+        logger.warning("textile div not found in polizei detail page")
+        return ""
+    paragraphs = textile_div.find_all('p')
+    if not paragraphs:
+        logger.warning("no paragraphs found in textile div")
+        return ""
+    return "".join(p.text for p in paragraphs)
 
 def parse_meeting_html(html: str) -> list[dict]:
     soup = BeautifulSoup(html, 'html.parser')

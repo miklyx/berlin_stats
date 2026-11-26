@@ -45,6 +45,7 @@ async def poll_loop() -> None:
     interval = float(os.environ.get("POLL_INTERVAL_HOURS", "24")) * 3600
     on_startup = os.environ.get("POLL_ON_STARTUP", "true").lower() not in ("0", "false", "no")
     delay = 0 if on_startup else interval
+    consecutive_errors = 0
     while True:
         await asyncio.sleep(delay)
         delay = interval
@@ -54,8 +55,12 @@ async def poll_loop() -> None:
                 logger.info("Poll skipped: another replica is polling")
             else:
                 logger.info("Poll done: %d new polizei, %d new meetings", *result)
+            consecutive_errors = 0
         except Exception:
-            logger.exception("Poll failed")
+            consecutive_errors += 1
+            logger.exception("Poll failed (attempt %d)", consecutive_errors)
+            if consecutive_errors >= 5:
+                logger.critical("Poll failed %d times in a row - possible permanent issue", consecutive_errors)
 
 
 @asynccontextmanager

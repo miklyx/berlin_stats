@@ -67,10 +67,14 @@ def close_pool() -> None:
 
 
 def init_db() -> None:
-    with get_pool().connection() as conn:
-        # replicas start together; serialize schema creation
-        conn.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK_ID,))
-        conn.execute(SCHEMA)
+    try:
+        with get_pool().connection() as conn:
+            # replicas start together; serialize schema creation
+            conn.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK_ID,))
+            conn.execute(SCHEMA)
+        logger.info("Database initialized successfully")
+    except Exception:
+        logger.exception("Failed to initialize database")
 
 
 @contextmanager

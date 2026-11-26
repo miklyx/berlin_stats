@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: berlin-stats-scraper
+  namespace: berlin-stats
+spec:
+  # Run every 24 hours at 2 AM
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: default
+          restartPolicy: OnFailure
+          containers:
+          - name: scraper
+            image: curlimages/curl:latest
+            args:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Starting polizei scrape..."
+              curl -X GET "http://berlin-stats/update_polizei" \
+                -H "X-Password: $SECRET_PASSWORD" \
+                -f -s -S
+              echo "Polizei scrape completed"
+              
+              echo "Starting meetings scrape..."
+              curl -X GET "http://berlin-stats/update_meetings" \
+                -H "X-Password: $SECRET_PASSWORD" \
+                -f -s -S
+              echo "Meetings scrape completed"
+            env:
+            - name: SECRET_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: berlin-stats
+                  key: SECRET_PASSWORD
