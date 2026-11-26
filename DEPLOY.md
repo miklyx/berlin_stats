@@ -40,13 +40,39 @@ sudo pkill -f 'python.*main:app'
 ps aux | grep 'python.*main:app' | grep -v grep
 ```
 
-### Option C: Using kubectl (Requires kubeconfig access)
-```bash
-# Fix kubeconfig permissions first (needs sudoers setup)
-sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+### Option C: Using kubectl (Requires sudoers NOPASSWD)
 
-# Then restart deployment
-kubectl -n berlin-stats rollout restart deployment/berlin-stats
+**Step 1: Configure sudoers for kuliki (run from Raspberry as root or with sudo)**
+```bash
+# SSH as root or with sudo access
+ssh kuliki@192.168.178.29
+sudo -i  # or su -
+
+# Create sudoers file for kubectl and K3s commands
+cat > /etc/sudoers.d/kuliki-k3s << 'EOF'
+# Allow kuliki to run kubectl without password
+kuliki ALL=(ALL) NOPASSWD: /usr/local/bin/kubectl
+
+# Allow kuliki to kill/restart processes without password
+kuliki ALL=(ALL) NOPASSWD: /bin/kill, /bin/pkill
+EOF
+
+# Verify syntax
+visudo -c -f /etc/sudoers.d/kuliki-k3s
+
+# Set correct permissions
+chmod 440 /etc/sudoers.d/kuliki-k3s
+```
+
+**Step 2: Restart deployment**
+```bash
+# Now kuliki can run kubectl without password
+sudo kubectl -n berlin-stats rollout restart deployment/berlin-stats
+
+# Or for faster pull:
+sudo kubectl set image deployment/berlin-stats -n berlin-stats \
+  berlin-stats=ghcr.io/miklyx/berlin_stats:latest \
+  --record=true
 
 # Monitor rollout
 kubectl -n berlin-stats rollout status deployment/berlin-stats
