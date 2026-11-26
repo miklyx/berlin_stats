@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timedelta
 
 import dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -20,6 +21,10 @@ MEETINGS_URL = "https://www.berlin.de/polizei/service/versammlungsbehoerde/versa
 
 Limit = Query(100, ge=1, le=500, description="Max rows to return")
 Offset = Query(0, ge=0, description="Rows to skip")
+
+# Track last successful poll
+_last_poll_time: datetime | None = None
+_last_poll_result: tuple[int, int] | None = None
 
 
 def update_polizei() -> int:
@@ -42,6 +47,7 @@ def poll_once() -> tuple[int, int] | None:
 
 
 async def poll_loop() -> None:
+    global _last_poll_time, _last_poll_result
     interval = float(os.environ.get("POLL_INTERVAL_HOURS", "24")) * 3600
     on_startup = os.environ.get("POLL_ON_STARTUP", "true").lower() not in ("0", "false", "no")
     delay = 0 if on_startup else interval
@@ -55,6 +61,8 @@ async def poll_loop() -> None:
                 logger.info("Poll skipped: another replica is polling")
             else:
                 logger.info("Poll done: %d new polizei, %d new meetings", *result)
+                _last_poll_time = datetime.utcnow()
+                _last_poll_result = result
             consecutive_errors = 0
         except Exception:
             consecutive_errors += 1
@@ -144,3 +152,30 @@ def update_meetings_endpoint():
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/health/scraper")
+async def health_check_scraper():
+    """Check scraper health - has it run recently?"""
+    if _last_poll_time is None:
+        return {"status": "unknown", "last_poll": None, "message": "No polls have run yet"}
+    
+    now = datetime.utcnow()
+    hours_since_poll = (now - _last_poll_time).total_seconds() / 3600
+    max_hours = float(os.environ.get("POLL_INTERVAL_HOURS", "24")) * 1.5  # Allow 50% buffer
+    
+    if hours_since_poll > max_hours:
+        return {
+            "status": "unhealthy",
+            "last_poll": _last_poll_time.isoformat() + "Z",
+            "hours_since_poll": round(hours_since_poll, 2),
+            "max_allowed_hours": round(max_hours, 2),
+            "last_result": _last_poll_result,
+        }
+    
+    return {
+        "status": "healthy",
+        "last_poll": _last_poll_time.isoformat() + "Z",
+        "hours_since_poll": round(hours_since_poll, 2),
+        "last_result": _last_poll_result,
+    }

@@ -4,8 +4,8 @@ metadata:
   name: berlin-stats-scraper
   namespace: berlin-stats
 spec:
-  # Run every 24 hours at 2 AM
-  schedule: "0 2 * * *"
+  # Run every 12 hours for redundancy
+  schedule: "0 */12 * * *"
   jobTemplate:
     spec:
       template:
@@ -20,20 +20,42 @@ spec:
             - -c
             - |
               set -e
-              echo "Starting polizei scrape..."
-              curl -X GET "http://berlin-stats/update_polizei" \
-                -H "X-Password: $SECRET_PASSWORD" \
-                -f -s -S
-              echo "Polizei scrape completed"
+              echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Starting scrape job..."
               
-              echo "Starting meetings scrape..."
-              curl -X GET "http://berlin-stats/update_meetings" \
+              echo "Polizei scrape starting..."
+              if curl -X GET "http://berlin-stats/update_polizei" \
                 -H "X-Password: $SECRET_PASSWORD" \
-                -f -s -S
-              echo "Meetings scrape completed"
+                -f -s -S -m 300; then
+                echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Polizei scrape succeeded"
+              else
+                echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Polizei scrape failed with exit code $?" >&2
+                exit 1
+              fi
+              
+              echo "Meetings scrape starting..."
+              if curl -X GET "http://berlin-stats/update_meetings" \
+                -H "X-Password: $SECRET_PASSWORD" \
+                -f -s -S -m 300; then
+                echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Meetings scrape succeeded"
+              else
+                echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Meetings scrape failed with exit code $?" >&2
+                exit 1
+              fi
+              
+              echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Scrape job completed successfully"
             env:
             - name: SECRET_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: berlin-stats
                   key: SECRET_PASSWORD
+            timeoutSeconds: 600
+            resources:
+              requests:
+                memory: "64Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "500m"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 10
