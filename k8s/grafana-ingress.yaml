@@ -1,0 +1,64 @@
+---
+# Ingress for Grafana monitoring dashboard
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: default-strip-grafana-prefix@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-grafana
+                port:
+                  number: 80
+---
+# Middleware to strip /grafana prefix
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-grafana-prefix
+  namespace: default
+spec:
+  stripPrefix:
+    prefixes:
+      - /grafana
+---
+# Ingress for Prometheus
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: default-strip-prometheus-prefix@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /prometheus
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-kube-prometheus-prometheus
+                port:
+                  number: 9090
+---
+# Middleware to strip /prometheus prefix
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-prometheus-prefix
+  namespace: default
+spec:
+  stripPrefix:
+    prefixes:
+      - /prometheus

@@ -1,0 +1,18 @@
+---
+# ServiceMonitor for Prometheus to scrape berlin-stats metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: berlin-stats
+  namespace: berlin-stats
+  labels:
+    app: berlin-stats
+spec:
+  selector:
+    matchLabels:
+      app: berlin-stats
+  endpoints:
+    - port: http
+      path: /berlin-stats/metrics
+      interval: 30s
+      scrapeTimeout: 10s
