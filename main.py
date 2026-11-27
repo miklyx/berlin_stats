@@ -72,7 +72,12 @@ async def poll_loop() -> None:
             else:
                 duration = (datetime.utcnow() - start).total_seconds()
                 polizei_count, meetings_count = result
-                logger.info("Poll done: %d new polizei, %d new meetings (%.1fs)", polizei_count, meetings_count, duration)
+                logger.info(
+                    "Poll done: %d new polizei, %d new meetings (%.1fs)",
+                    polizei_count,
+                    meetings_count,
+                    duration,
+                )
                 
                 # Update metrics
                 polizei_added.inc(polizei_count)
