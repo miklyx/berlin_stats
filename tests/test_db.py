@@ -29,6 +29,15 @@ def test_meeting_dedup_and_search(clean_db):
     assert db.find_meeting_by_datum_and_keyword("02.01.2025", "klima") is None
 
 
+def test_record_counts(clean_db):
+    assert db.count_polizei() == 0
+    assert db.count_meetings() == 0
+    db.insert_only_new_polizei_data([REPORT])
+    db.insert_only_new_meeting_data([MEETING])
+    assert db.count_polizei() == 1
+    assert db.count_meetings() == 1
+
+
 def test_pagination(clean_db):
     rows = [{**MEETING, "Thema": f"demo {i}"} for i in range(5)]
     db.insert_only_new_meeting_data(rows)

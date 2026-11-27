@@ -158,7 +158,7 @@ def count_polizei() -> int:
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM polizei")
-            return cur.fetchone()[0]
+            return cur.fetchone()["count"]
 
 
 def count_meetings() -> int:
@@ -166,4 +166,4 @@ def count_meetings() -> int:
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM meeting")
-            return cur.fetchone()[0]
+            return cur.fetchone()["count"]
